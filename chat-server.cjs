@@ -12,6 +12,15 @@ async function body(req){let text='';for await(const chunk of req){text+=chunk;i
 const server=http.createServer(async(req,res)=>{const url=new URL(req.url,'http://localhost');res.setHeader('X-Content-Type-Options','nosniff');
  try{
   if(req.method==='GET'&&(url.pathname==='/'||url.pathname==='/cultural-learning-dashboard-v2.html')){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});fs.createReadStream(path.join(__dirname,'cultural-learning-dashboard-v2.html')).pipe(res);return}
+  if((req.method==='GET'||req.method==='HEAD')&&url.pathname.startsWith('/storybooks/')){
+   const name=decodeURIComponent(url.pathname.slice('/storybooks/'.length));
+   if(!name||name.includes('/')||name.includes('\\')||name.includes('\0')||!name.toLowerCase().endsWith('.pdf'))return json(res,400,{error:'Invalid PDF name'});
+   const root=path.join(__dirname,'storybooks'),file=path.join(root,name);
+   let stat;try{const real=await fs.promises.realpath(file);if(path.dirname(real)!==await fs.promises.realpath(root))return json(res,403,{error:'Invalid PDF path'});stat=await fs.promises.stat(real);if(!stat.isFile())throw Error()}catch{return json(res,404,{error:'PDF missing. Upload this exact filename into the storybooks folder: '+name})}
+   res.writeHead(200,{'Content-Type':'application/pdf','Content-Length':stat.size,'Cache-Control':'public, max-age=3600'});
+   if(req.method==='HEAD')return res.end();
+   const stream=fs.createReadStream(file);stream.on('error',()=>res.destroy());stream.pipe(res);return;
+  }
   if(req.method==='POST'&&url.pathname.startsWith('/api/chat/')){
    if(req.headers.origin&&new URL(req.headers.origin).host!==req.headers.host)return json(res,403,{error:'Different origin'});
    const data=await body(req);
